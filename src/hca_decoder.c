@@ -297,11 +297,11 @@ void hca_decoder_decode_step1(HcaDecoder *decoder, HcaBitReader *reader) {
             for (int i = 0; i < channel->value1_count; i++)
                 channel->value1[i] = hca_bitreader_read(reader, 6);
         } else if (v > 0) {
-    		channel->value1[0] = hca_bitreader_read(reader, 6);
-    		for (int i = 1, v1 = (1 << v) - 1, v2 = v1 >> 1; i < channel->value1_count; i++) {
-    			int v3 = hca_bitreader_read(reader, v);
+            channel->value1[0] = hca_bitreader_read(reader, 6);
+            for (int i = 1, v1 = (1 << v) - 1, v2 = v1 >> 1; i < channel->value1_count; i++) {
+                int v3 = hca_bitreader_read(reader, v);
                 channel->value1[i] = v1 == v3 ? hca_bitreader_read(reader, 6) : (channel->value1[i - 1] + v3 - v2) & 63;
-    		}
+            }
         }
 
         if (channel->type == 2)
@@ -315,12 +315,12 @@ void hca_decoder_decode_step1(HcaDecoder *decoder, HcaBitReader *reader) {
         if (v > 0) {
             for (int i = 0; i < channel->value1_count; i++) {
                 channel->scale[i] = channel->value1[i];
-        		if (channel->value1[i]) {
-        			channel->scale[i] = scale_mod_table[i] - ((channel->scale[i] * 5) / 2);
+                if (channel->value1[i]) {
+                    channel->scale[i] = scale_mod_table[i] - ((channel->scale[i] * 5) / 2);
                     channel->scale[i] = channel->scale[i] < 0 ? 15 : channel->scale[i] < 57 ? invert_table[channel->scale[i]] : 1;
-        		}
+                }
                 channel->base[i] = scaling_table[channel->value1[i]] * range_table[channel->scale[i]];
-        	}
+            }
         } else {
             memset(channel->value1, 0, sizeof(int) * 128);
             memset(channel->scale, 0, sizeof(int) * 128);
@@ -331,43 +331,43 @@ void hca_decoder_decode_step1(HcaDecoder *decoder, HcaBitReader *reader) {
 void hca_decoder_decode_step2(HcaDecoder *decoder, HcaBitReader *reader) {
     static const int max_bit_table[] = { 0, 2, 3, 3, 4, 4, 4, 4, 5, 6, 7, 8, 9, 10, 11, 12, 0, 0, 0 };
     static const int read_bit_table[] = {
-		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-		1, 1, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-		2, 2, 2, 2, 2, 2, 3, 3, 0, 0, 0, 0, 0, 0, 0, 0,
-		2, 2, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0, 0, 0, 0, 0,
-		3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4,
-		3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4,
-		3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
-		3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
-	};
-	static const double read_val_table[] = {
-		0, 0, 0,  0,  0,  0, 0,  0,  0,  0, 0,  0,  0,  0, 0,  0,
-		0, 0, 1, -1,  0,  0, 0,  0,  0,  0, 0,  0,  0,  0, 0,  0,
-		0, 0, 1,  1, -1, -1, 2, -2,  0,  0, 0,  0,  0,  0, 0,  0,
-		0, 0, 1, -1,  2, -2, 3, -3,  0,  0, 0,  0,  0,  0, 0,  0,
-		0, 0, 1,  1, -1, -1, 2,  2, -2, -2, 3,  3, -3, -3, 4, -4,
-		0, 0, 1,  1, -1, -1, 2,  2, -2, -2, 3, -3,  4, -4, 5, -5,
-		0, 0, 1,  1, -1, -1, 2, -2,  3, -3, 4, -4,  5, -5, 6, -6,
-		0, 0, 1, -1,  2, -2, 3, -3,  4, -4, 5, -5,  6, -6, 7, -7
-	};
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        1, 1, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        2, 2, 2, 2, 2, 2, 3, 3, 0, 0, 0, 0, 0, 0, 0, 0,
+        2, 2, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0, 0, 0, 0, 0,
+        3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4,
+        3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4,
+        3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
+        3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
+    };
+    static const double read_val_table[] = {
+        0, 0, 0,  0,  0,  0, 0,  0,  0,  0, 0,  0,  0,  0, 0,  0,
+        0, 0, 1, -1,  0,  0, 0,  0,  0,  0, 0,  0,  0,  0, 0,  0,
+        0, 0, 1,  1, -1, -1, 2, -2,  0,  0, 0,  0,  0,  0, 0,  0,
+        0, 0, 1, -1,  2, -2, 3, -3,  0,  0, 0,  0,  0,  0, 0,  0,
+        0, 0, 1,  1, -1, -1, 2,  2, -2, -2, 3,  3, -3, -3, 4, -4,
+        0, 0, 1,  1, -1, -1, 2,  2, -2, -2, 3, -3,  4, -4, 5, -5,
+        0, 0, 1,  1, -1, -1, 2, -2,  3, -3, 4, -4,  5, -5, 6, -6,
+        0, 0, 1, -1,  2, -2, 3, -3,  4, -4, 5, -5,  6, -6, 7, -7
+    };
 
     for (int n = 0; n < 8; n++) {
         for (int c = 0; c < decoder->num_channels; c++) {
             HcaDecoderChannelData *channel = decoder->channels + c;
             memcpy(channel->block[n], zeros, sizeof(double) * 128);
             for (int i = 0; i < channel->value1_count; i++) {
-        		int s = channel->scale[i];
-        		int bit_size = max_bit_table[s];
+                int s = channel->scale[i];
+                int bit_size = max_bit_table[s];
 
-        		if (s < 8) {
+                if (s < 8) {
                     int v = hca_bitreader_check(reader, bit_size) + (s << 4);
                     channel->block[n][i] = channel->base[i] * read_val_table[v];
                     hca_bitreader_seek(reader, read_bit_table[v]);
-        		} else {
+                } else {
                     int v = hca_bitreader_read(reader, bit_size - 1);
                     channel->block[n][i] = v ? channel->base[i] * (hca_bitreader_read(reader, 1) ? -v : v) : 0;
-        		}
-        	}
+                }
+            }
         }
     }
 }
