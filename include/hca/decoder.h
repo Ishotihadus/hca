@@ -1,6 +1,7 @@
 #pragma once
 #include <stdint.h>
 #include <hca/decryptor.h>
+#include <hca/error.h>
 
 typedef struct {
     int type;
@@ -24,6 +25,6 @@ typedef struct HcaDecoder {
     double *wave_buffer;
 } HcaDecoder;
 
-enum HcaError hca_decoder_init(HcaDecoder *decoder, struct HcaFileInfo *info, uint64_t key);
-enum HcaError hca_decoder_free(HcaDecoder *decoder);
-enum HcaError hca_decoder_decode_block(HcaDecoder *decoder, FILE *fp);
+HcaError hca_decoder_init(HcaDecoder *decoder, struct HcaFileInfo *info, uint64_t key);
+HcaError hca_decoder_free(HcaDecoder *decoder);
+HcaError hca_decoder_decode_block(HcaDecoder *decoder, FILE *fp);

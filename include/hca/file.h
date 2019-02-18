@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <hca/decoder.h>
+#include <hca/error.h>
 
 typedef struct {
     bool available;
@@ -59,14 +60,14 @@ typedef struct HcaFile {
     bool loop_started;
 } HcaFile;
 
-enum HcaError hca_file_info_init(HcaFileInfo *info, FILE *fp);
+HcaError hca_file_info_init(HcaFileInfo *info, FILE *fp);
 void hca_file_info_print(HcaFileInfo *info, FILE *fp);
 int hca_file_info_get_num_samples(HcaFileInfo *info);
 // the end sample is the "next" sample of the end of the loop
 bool hca_file_info_get_loop(HcaFileInfo *info, int *start, int *end);
 void hca_file_info_free(HcaFileInfo *info);
 
-enum HcaError hca_file_init(HcaFile *file, FILE *fp, uint64_t key);
+HcaError hca_file_init(HcaFile *file, FILE *fp, uint64_t key);
 size_t hca_file_calc_buffer_size(HcaFile *file);
-enum HcaError hca_file_read(double *buffer, size_t *written_size, bool loop, HcaFile *file);
+HcaError hca_file_read(double *buffer, size_t *written_size, bool loop, HcaFile *file);
 void hca_file_free(HcaFile *file);

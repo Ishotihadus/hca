@@ -1,6 +1,7 @@
 #pragma once
 #include <stddef.h>
 #include <stdint.h>
+#include <hca/error.h>
 
 typedef struct HcaDecryptor {
     int type;
@@ -9,5 +10,5 @@ typedef struct HcaDecryptor {
     uint16_t table_large[65536];
 } HcaDecryptor;
 
-enum HcaError hca_decryptor_init_table(HcaDecryptor *decryptor);
-enum HcaError hca_decryptor_decrypt(const HcaDecryptor *decryptor, uint8_t *data, const size_t len);
+HcaError hca_decryptor_init_table(HcaDecryptor *decryptor);
+HcaError hca_decryptor_decrypt(const HcaDecryptor *decryptor, uint8_t *data, const size_t len);
