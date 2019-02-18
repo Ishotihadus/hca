@@ -1,34 +1,48 @@
-CFLAGS += -std=c99 -O2 -Wall -Wextra
-CPPFLAGS += -Iinclude `pkg-config --cflags sndfile`
-LDLIBS += `pkg-config --libs sndfile` -lm
-SOURCES = $(wildcard src/*.c)
-OBJS = $(subst src/,obj/,$(SOURCES:.c=.o))
-LIBS = lib/libhca.a
-LIB_HCA_DEPENDENCIES = $(subst src/,obj/,$(subst .c,.o,$(wildcard src/hca_*.c)))
+CC := gcc
+CXX := g++
+
+SRCDIR = src
+OBJDIR = obj
+
 TARGET = bin/hca
-PREFIX = $(HOME)/.local
+TARGET_LIBS = lib/libhca.a
+PREFIX ?= $(HOME)/.local
 
-all: $(TARGET) $(LIBS)
+DEPENDENCIES_CFLAGS := $(shell pkg-config --cflags sndfile)
+DEPENDENCIES_LDFLAGS := $(shell pkg-config --libs sndfile)
 
-$(TARGET): $(OBJS)
-	mkdir -p bin
-	$(CC) -o $@ $^ $(LDLIBS)
+CFLAGS += -std=c11 -O2 -Wall -Wextra
+CXXFLAGS += -std=c++11 -O2 -Wall -Wextra
+CPPFLAGS += -Iinclude $(SNDFILE_CFLAGS)
+LDFLAGS += -Llib -lm $(DEPENDENCIES_LDFLAGS)
 
-obj/%.o: src/%.c
-	mkdir -p obj
-	$(CC) $(CFLAGS) $(CXXFLAGS) $(CPPFLAGS) -o $@ -c $<
+COBJS := $(patsubst $(SRCDIR)/%.c,$(OBJDIR)/%.o,$(wildcard $(SRCDIR)/*.c))
+CXXOBJS := $(patsubst $(SRCDIR)/%.cpp,$(OBJDIR)/%.o,$(wildcard $(SRCDIR)/*.cpp))
+OBJS := $(COBJS) $(CXXOBJS)
 
-lib/libhca.a: $(LIB_HCA_DEPENDENCIES)
-	mkdir -p lib
+all: $(TARGET) $(TARGET_LIBS)
+
+$(TARGET): $(OBJDIR)/main.o $(OBJDIR)/writer.o lib/libhca.a
+	@mkdir -p bin
+	$(CC) $^ $(LDFLAGS) -lhca -o $@
+
+$(COBJS): $(OBJDIR)/%.o: $(SRCDIR)/%.c
+	@mkdir -p $(OBJDIR)
+	$(CC) $(CFLAGS) $(CPPFLAGS) -c $< -o $@
+
+$(CXXOBJS): $(OBJDIR)/%.o: $(SRCDIR)/%.cpp
+	@mkdir -p $(OBJDIR)
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $< -o $@
+
+lib/libhca.a: $(filter $(OBJDIR)/hca_%.o,$(OBJS))
+	@mkdir -p lib
 	ar rs $@ $^
 
-.PHONY: clean install install-bin install-lib
-install: install-bin install-lib install-include
-install-bin: $(TARGET)
-	cp -vR $^ $(PREFIX)/bin/
-install-lib: $(LIBS)
-	cp -vR $^ $(PREFIX)/lib/
-install-include: include/hca
-	cp -vR $^ $(PREFIX)/include/
+.PHONY: clean install
+install:
+	mkdir -p $(DESTDIR)$(PREFIX)/bin $(DESTDIR)$(PREFIX)/lib $(DESTDIR)$(PREFIX)/include
+	cp -v $(TARGET) $(DESTDIR)$(PREFIX)/bin/
+	cp -v $(TARGET_LIBS) $(DESTDIR)$(PREFIX)/lib/
+	cp -vr include/hca $(DESTDIR)$(PREFIX)/include/
 clean:
-	rm -f $(OBJS) $(LIBS) $(TARGET)
+	rm -f bin/* lib/* $(OBJDIR)/*
