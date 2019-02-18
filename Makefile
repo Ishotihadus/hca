@@ -23,10 +23,12 @@ lib/libhca.a: $(LIB_HCA_DEPENDENCIES)
 	ar rs $@ $^
 
 .PHONY: clean install install-bin install-lib
-install: install-bin install-lib
+install: install-bin install-lib install-include
 install-bin: $(TARGET)
 	cp -vR $^ $(PREFIX)/bin/
 install-lib: $(LIBS)
 	cp -vR $^ $(PREFIX)/lib/
+install-include: include/hca
+	cp -vR $^ $(PREFIX)/include/
 clean:
 	rm -f $(OBJS) $(LIBS) $(TARGET)
