@@ -219,6 +219,7 @@ HcaError hca_decoder_init(HcaDecoder *decoder, HcaFileInfo *hca, uint64_t key) {
 
 HcaError hca_decoder_free(HcaDecoder *decoder) {
     free(decoder->block_buffer);
+    free(decoder->wave_buffer);
     return kHcaSuccess;
 }
 

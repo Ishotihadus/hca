@@ -252,4 +252,5 @@ HcaError hca_file_read(double *buffer, size_t *num_samples, bool loop, HcaFile *
 
 void hca_file_free(HcaFile *file) {
     hca_file_info_free(&file->info);
+    hca_decoder_free(&file->decoder);
 }
