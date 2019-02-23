@@ -5,12 +5,11 @@
 
 typedef struct {
     int type;
-    int value1_count;
-    int value1[128];
-    int value2[8];
-    int *value3;
-    int scale[128];
-    double base[128];
+    int num_base_bins;
+    int range[128];
+    int stereo_intensity_ratio[8];
+    double gain[128];
+    double high_frequency_scale[128];
     double block[8][128];
 } HcaDecoderChannelData;
 

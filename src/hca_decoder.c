@@ -198,10 +198,8 @@ HcaError hca_decoder_init(HcaDecoder *decoder, HcaFileInfo *hca, uint64_t key) {
         }
     }
 
-    for (int i = 0; i < hca->num_channels; i++) {
-        decoder->channels[i].value1_count = decoder->channels[i].type == 2 ? hca->compression_params[5] : hca->compression_params[5] + hca->compression_params[6];
-        decoder->channels[i].value3 = decoder->channels[i].value1 + (hca->compression_params[5] + hca->compression_params[6]);
-    }
+    for (int i = 0; i < hca->num_channels; i++)
+        decoder->channels[i].num_base_bins = decoder->channels[i].type == 2 ? hca->compression_params[5] : hca->compression_params[5] + hca->compression_params[6];
 
     decoder->value3_count = hca->compression_params[7] ?
         (hca->compression_params[4] - hca->compression_params[5] - hca->compression_params[6] + hca->compression_params[7] - 1) / hca->compression_params[7] : 0;
@@ -259,7 +257,7 @@ HcaError hca_decoder_decode_block(HcaDecoder *decoder, FILE *fp) {
 static inline bool hca_decoder_zeroblock(HcaDecoder *decoder) {
     int i, size = decoder->file->block_size - 4;
     uint8_t *block = decoder->block_buffer + 2;
-    for (i = 0; i < size; i += 8)
+    for (i = 0; i < size - 7; i += 8)
         if (*(uint64_t*)(block + i) != 0)
             return false;
     for (; i < size; i++)
@@ -281,51 +279,59 @@ void hca_decoder_decode_step1(HcaDecoder *decoder, HcaBitReader *reader) {
         2.0 / 31, 2.0 / 63, 2.0 / 127, 2.0 / 255, 2.0 / 511, 2.0 / 1023, 2.0 / 2047, 2.0 / 4095
     };
 
-    const int b = (hca_bitreader_read(reader, 9) << 8) - hca_bitreader_read(reader, 7);
-    int scale_mod_table[128];
-    if (decoder->file->ath_type)
-        for (int i = 0; i < 128; i++)
-            scale_mod_table[i] = decoder->ath[i] + ((b + i) >> 8) + 1;
-    else
-        for (int i = 0; i < 128; i++)
-            scale_mod_table[i] = ((b + i) >> 8) + 1;
+    int range_mod_table[128];
+    int range_mod_base = hca_bitreader_read(reader, 9);
+    int range_mod_border = hca_bitreader_read(reader, 7);
+    if (decoder->file->ath_type) {
+        for (int i = 0; i < range_mod_border; i++)
+            range_mod_table[i] = decoder->ath[i] + range_mod_base;
+        ++range_mod_base;
+        for (int i = range_mod_border; i < 128; i++)
+            range_mod_table[i] = decoder->ath[i] + range_mod_base;
+    } else {
+        for (int i = 0; i < range_mod_border; i++)
+            range_mod_table[i] = range_mod_base;
+        ++range_mod_base;
+        for (int i = range_mod_border; i < 128; i++)
+            range_mod_table[i] = range_mod_base;
+    }
 
     for (int c = 0; c < decoder->num_channels; c++) {
         HcaDecoderChannelData *channel = decoder->channels + c;
 
         const int v = hca_bitreader_read(reader, 3);
-        if (v >= 6) {
-            for (int i = 0; i < channel->value1_count; i++)
-                channel->value1[i] = hca_bitreader_read(reader, 6);
-        } else if (v > 0) {
-            channel->value1[0] = hca_bitreader_read(reader, 6);
-            for (int i = 1, v1 = (1 << v) - 1, v2 = v1 >> 1; i < channel->value1_count; i++) {
-                int v3 = hca_bitreader_read(reader, v);
-                channel->value1[i] = v1 == v3 ? hca_bitreader_read(reader, 6) : (channel->value1[i - 1] + v3 - v2) & 63;
-            }
-        }
 
-        if (channel->type == 2)
-            for (int i = 0; i < 8; i++)
-                channel->value2[i] = hca_bitreader_read(reader, 4);
-        else
-            for (int i = 0; i < decoder->value3_count; i++)
-                channel->value3[i] = hca_bitreader_read(reader, 6);
-
-        memcpy(channel->base, zeros, sizeof(double) * 128);
-        if (v > 0) {
-            for (int i = 0; i < channel->value1_count; i++) {
-                channel->scale[i] = channel->value1[i];
-                if (channel->value1[i]) {
-                    channel->scale[i] = scale_mod_table[i] - ((channel->scale[i] * 5) / 2);
-                    channel->scale[i] = channel->scale[i] < 0 ? 15 : channel->scale[i] < 57 ? invert_table[channel->scale[i]] : 1;
+        if (v) {
+            if (v >= 6) {
+                for (int i = 0; i < channel->num_base_bins; i++)
+                    channel->range[i] = hca_bitreader_read(reader, 6);
+            } else {
+                channel->range[0] = hca_bitreader_read(reader, 6);
+                for (int i = 1, v1 = (1 << v) - 1, v2 = v1 >> 1; i < channel->num_base_bins; i++) {
+                    int v3 = hca_bitreader_read(reader, v);
+                    channel->range[i] = v1 == v3 ? hca_bitreader_read(reader, 6) : (channel->range[i - 1] + v3 - v2) & 63;
                 }
-                channel->base[i] = scaling_table[channel->value1[i]] * range_table[channel->scale[i]];
+            }
+            if (channel->type != 2) {
+                for (int i = 0, k = channel->num_base_bins, l = channel->num_base_bins - 1; i < decoder->value3_count; i++)
+                    for (int j = 0, v1 = hca_bitreader_read(reader, 6) + 64; j < decoder->file->compression_params[7] && k < decoder->file->compression_params[4]; j++, k++, l--)
+                        channel->high_frequency_scale[k] = scale_conversion_table[v1 - channel->range[l]];
+            }
+            for (int i = 0; i < channel->num_base_bins; i++) {
+                int scale = channel->range[i];
+                if (channel->range[i]) {
+                    channel->range[i] = range_mod_table[i] - (channel->range[i] * 5) / 2;
+                    channel->range[i] = channel->range[i] < 0 ? 15 : channel->range[i] < 57 ? invert_table[channel->range[i]] : 1;
+                }
+                channel->gain[i] = scaling_table[scale] * range_table[channel->range[i]];
             }
         } else {
-            memset(channel->value1, 0, sizeof(int) * 128);
-            memset(channel->scale, 0, sizeof(int) * 128);
+            memset(channel->range, 0, sizeof(int) * 128);
+            memcpy(channel->gain, zeros, sizeof(double) * 128);
         }
+        if (channel->type == 2)
+            for (int i = 0; i < 8; i++)
+                channel->stereo_intensity_ratio[i] = hca_bitreader_read(reader, 4);
     }
 }
 
@@ -356,17 +362,16 @@ void hca_decoder_decode_step2(HcaDecoder *decoder, HcaBitReader *reader) {
         for (int c = 0; c < decoder->num_channels; c++) {
             HcaDecoderChannelData *channel = decoder->channels + c;
             memcpy(channel->block[n], zeros, sizeof(double) * 128);
-            for (int i = 0; i < channel->value1_count; i++) {
-                int s = channel->scale[i];
-                int bit_size = max_bit_table[s];
-
-                if (s < 8) {
-                    int v = hca_bitreader_check(reader, bit_size) + (s << 4);
-                    channel->block[n][i] = channel->base[i] * read_val_table[v];
+            for (int i = 0; i < channel->num_base_bins; i++) {
+                int r = channel->range[i];
+                int bit_size = max_bit_table[r];
+                if (r < 8) {
+                    int v = hca_bitreader_check(reader, bit_size) + (r << 4);
+                    channel->block[n][i] = channel->gain[i] * read_val_table[v];
                     hca_bitreader_seek(reader, read_bit_table[v]);
                 } else {
                     int v = hca_bitreader_read(reader, bit_size - 1);
-                    channel->block[n][i] = v ? channel->base[i] * (hca_bitreader_read(reader, 1) ? -v : v) : 0;
+                    channel->block[n][i] = v ? channel->gain[i] * (hca_bitreader_read(reader, 1) ? -v : v) : 0;
                 }
             }
         }
@@ -374,27 +379,17 @@ void hca_decoder_decode_step2(HcaDecoder *decoder, HcaBitReader *reader) {
 }
 
 void hca_decoder_decode_step3(HcaDecoder *decoder) {
-    static const double *table = scale_conversion_table + 64;
-
     if (decoder->file->version < 0x200 || decoder->file->compression_params[7] == 0)
         return;
-
     for (int c = 0; c < decoder->num_channels; c++) {
         HcaDecoderChannelData *channel = decoder->channels + c;
         if (channel->type == 2)
             continue;
-        for (int i = 0, k = channel->value1_count, l = channel->value1_count - 1; i < decoder->value3_count; i++) {
-            for (int j = 0; j < decoder->file->compression_params[7]; j++, k++, l--) {
-                if (k >= decoder->file->compression_params[4])
-                    goto end_decode3_loop;
-                double f = table[channel->value3[i] - channel->value1[l]];
-                for (int n = 0; n < 8; n++)
-                    channel->block[n][k] = f * channel->block[n][l];
-            }
-        }
-        end_decode3_loop: ;
-        for (int n = 0; n < 8; n++)
+        for (int n = 0; n < 8; n++) {
+            for (int k = channel->num_base_bins, l = channel->num_base_bins - 1; k < decoder->file->compression_params[4]; k++, l--)
+                channel->block[n][k] = channel->high_frequency_scale[k] * channel->block[n][l];
             channel->block[n][127] = 0;
+        }
     }
 }
 
@@ -414,8 +409,8 @@ void hca_decoder_decode_step4(HcaDecoder *decoder) {
         if (decoder->channels[c].type != 1)
             continue;
         for (int n = 0; n < 8; n++) {
-            double f1 = intensity_ratio_table1[decoder->channels[c + 1].value2[n]];
-            double f2 = intensity_ratio_table2[decoder->channels[c + 1].value2[n]];
+            double f1 = intensity_ratio_table1[decoder->channels[c + 1].stereo_intensity_ratio[n]];
+            double f2 = intensity_ratio_table2[decoder->channels[c + 1].stereo_intensity_ratio[n]];
             for (int i = decoder->file->compression_params[5]; i < decoder->file->compression_params[4]; i++) {
                 decoder->channels[c + 1].block[n][i] = decoder->channels[c].block[n][i] * f2;
                 decoder->channels[c].block[n][i] *= f1;
