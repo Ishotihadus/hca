@@ -283,16 +283,18 @@ void hca_decoder_decode_step1(HcaDecoder *decoder, HcaBitReader *reader) {
     int range_mod_base = hca_bitreader_read(reader, 9);
     int range_mod_border = hca_bitreader_read(reader, 7);
     if (decoder->file->ath_type) {
-        for (int i = 0; i < range_mod_border; i++)
+        int i = 0;
+        for (; i < range_mod_border; i++)
             range_mod_table[i] = decoder->ath[i] + range_mod_base;
         ++range_mod_base;
-        for (int i = range_mod_border; i < 128; i++)
+        for (; i < 128; i++)
             range_mod_table[i] = decoder->ath[i] + range_mod_base;
     } else {
-        for (int i = 0; i < range_mod_border; i++)
+        int i = 0;
+        for (; i < range_mod_border; i++)
             range_mod_table[i] = range_mod_base;
         ++range_mod_base;
-        for (int i = range_mod_border; i < 128; i++)
+        for (; i < 128; i++)
             range_mod_table[i] = range_mod_base;
     }
 
@@ -312,11 +314,13 @@ void hca_decoder_decode_step1(HcaDecoder *decoder, HcaBitReader *reader) {
                     channel->range[i] = v1 == v3 ? hca_bitreader_read(reader, 6) : (channel->range[i - 1] + v3 - v2) & 63;
                 }
             }
-            if (channel->type != 2) {
+            if (channel->type == 2)
+                for (int i = 0; i < 8; i++)
+                    channel->stereo_intensity_ratio[i] = hca_bitreader_read(reader, 4);
+            else
                 for (int i = 0, k = channel->num_base_bins, l = channel->num_base_bins - 1; i < decoder->value3_count; i++)
                     for (int j = 0, v1 = hca_bitreader_read(reader, 6) + 64; j < decoder->file->compression_params[7] && k < decoder->file->compression_params[4]; j++, k++, l--)
                         channel->high_frequency_scale[k] = scale_conversion_table[v1 - channel->range[l]];
-            }
             for (int i = 0; i < channel->num_base_bins; i++) {
                 int scale = channel->range[i];
                 if (channel->range[i]) {
@@ -328,10 +332,12 @@ void hca_decoder_decode_step1(HcaDecoder *decoder, HcaBitReader *reader) {
         } else {
             memset(channel->range, 0, sizeof(int) * 128);
             memcpy(channel->gain, zeros, sizeof(double) * 128);
+            if (channel->type == 2)
+                for (int i = 0; i < 8; i++)
+                    channel->stereo_intensity_ratio[i] = hca_bitreader_read(reader, 4);
+            else if (channel->type != 2)
+                hca_bitreader_seek(reader, 6 * decoder->value3_count);
         }
-        if (channel->type == 2)
-            for (int i = 0; i < 8; i++)
-                channel->stereo_intensity_ratio[i] = hca_bitreader_read(reader, 4);
     }
 }
 
