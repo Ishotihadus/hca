@@ -34,9 +34,8 @@ void print_help(FILE *stream, const char **argv) {
         "  -n, --normalize   normalize waveforms not to be clipped\n"
         "\n"
         "  -i, --info        show info about input file and quit\n"
-        "      --verbose     verbose output\n"
-        "  -h, --help        show this help message\n"
-        "      --version     show version info\n"
+        "  -h, --help        show this help message and quit\n"
+        "      --version     show version info and quit\n"
     , argv[0]);
 }
 
@@ -82,9 +81,9 @@ int show_info(const char *input) {
 int main(int argc, char const *argv[]) {
     const char *input = NULL;
     char *output = NULL;
+    char *endptr;
     bool show_info_flag = false;
     bool ignore_rva = false;
-    bool verbose = false;
     bool ignore_options = false;
     uint64_t key = 765765765765765ULL;
     uint16_t sub_key = 0;
@@ -95,15 +94,35 @@ int main(int argc, char const *argv[]) {
             if (strcmp(argv[i], "-i") == 0 || strcmp(argv[i], "--info") == 0) {
                 show_info_flag = true;
             } else if (strcmp(argv[i], "-a") == 0) {
-                key = (key & 0xffffffff00000000) | (strtoul(argv[++i], NULL, 16) & 0xffffffff);
+                key = (key & 0xffffffff00000000) | (strtoul(argv[++i], &endptr, 16) & 0xffffffff);
+                if (*endptr != '\0') {
+                    print_error("Invalid key (lower bits)", argv);
+                    return 1;
+                }
             } else if (strcmp(argv[i], "-b") == 0) {
-                key = (key & 0xffffffff) | ((uint64_t)strtoul(argv[++i], NULL, 16) << 32);
+                key = (key & 0xffffffff) | ((uint64_t)strtoul(argv[++i], &endptr, 16) << 32);
+                if (*endptr != '\0') {
+                    print_error("Invalid key (higher bits)", argv);
+                    return 1;
+                }
             } else if (strcmp(argv[i], "-k") == 0 || strcmp(argv[i], "--key") == 0) {
-                key = strtoull(argv[++i], NULL, 0);
+                key = strtoull(argv[++i], &endptr, 0);
+                if (*endptr != '\0') {
+                    print_error("Invalid key", argv);
+                    return 1;
+                }
             } else if (strcmp(argv[i], "-s") == 0 || strcmp(argv[i], "--sub-key") == 0) {
-                sub_key = strtoul(argv[++i], NULL, 0);
+                sub_key = strtoul(argv[++i], &endptr, 0);
+                if (*endptr != '\0') {
+                    print_error("Invalid subkey", argv);
+                    return 1;
+                }
             } else if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--volume") == 0) {
-                config.volume = atof(argv[++i]);
+                config.volume = strtod(argv[++i], &endptr);
+                if (*endptr != '\0') {
+                    print_error("Invalid volume value", argv);
+                    return 1;
+                }
             } else if (strcmp(argv[i], "--ignore-rva") == 0) {
                 ignore_rva = true;
             } else if (strcmp(argv[i], "-n") == 0 || strcmp(argv[i], "--normalize") == 0 || strcmp(argv[i], "--normalise") == 0) {
@@ -127,7 +146,7 @@ int main(int argc, char const *argv[]) {
                 } else if (strcmp(typestr, "ogg") == 0) {
                     format = SF_FORMAT_OGG;
                 } else {
-                    print_error("Unknown output format", argv);
+                    print_error("Invalid output format", argv);
                     return 1;
                 }
                 config.format = (config.format & ~SF_FORMAT_TYPEMASK) | format;
@@ -155,7 +174,7 @@ int main(int argc, char const *argv[]) {
                         break;
                 }
                 if (!format) {
-                    print_error("Unknown output bit type", argv);
+                    print_error("Invalid output bit type", argv);
                     return 1;
                 }
                 if (strcmp(endianstr, "le") == 0) {
@@ -163,14 +182,16 @@ int main(int argc, char const *argv[]) {
                 } else if (strcmp(endianstr, "be") == 0) {
                     format |= SF_ENDIAN_BIG;
                 } else if (*endianstr != '\0') {
-                    print_error("Unknown output bit type", argv);
+                    print_error("Invalid output bit type", argv);
                     return 1;
                 }
                 config.format = (config.format & ~(SF_FORMAT_TYPEMASK | SF_FORMAT_ENDMASK)) | format;
             } else if (strcmp(argv[i], "-q") == 0 || strcmp(argv[i], "--quality") == 0) {
-                config.quality = atof(argv[++i]);
-            } else if (strcmp(argv[i], "--verbose") == 0) {
-                verbose = true;
+                config.quality = strtod(argv[++i], &endptr);
+                if (*endptr != '\0' || config.quality < 0 || config.quality > 1) {
+                    print_error("Invalid quality value", argv);
+                    return 1;
+                }
             } else if (strcmp(argv[i], "--version") == 0) {
                 printf(VERSION "\n");
                 return 0;
@@ -179,6 +200,9 @@ int main(int argc, char const *argv[]) {
                 return 0;
             } else if (strcmp(argv[i], "--") == 0) {
                 ignore_options = true;
+            } else {
+                print_error("Unknown option", argv);
+                return 1;
             }
         } else {
             input = argv[i];
@@ -190,8 +214,6 @@ int main(int argc, char const *argv[]) {
         return 1;
     }
 
-    if (verbose)
-        fprintf(stderr, VERSION "\n");
     if (show_info_flag)
         return show_info(input);
 
@@ -299,15 +321,12 @@ int main(int argc, char const *argv[]) {
         return 1;
     }
 
-    if (verbose)
-        print_info(stderr, &hca.info, ifp == stdin ? NULL : input);
-
     config.path = output;
     config.num_channels = hca.info.num_channels;
     config.sampling_rate = hca.info.sampling_rate;
     config.expected_num_samples = hca_file_info_get_num_samples(&hca.info);
 
-    double *buffer = (double*)malloc(1024 * hca.info.num_channels * sizeof(double));
+    double *buffer = (double*)malloc(hca_file_calc_buffer_size(&hca));
     if (buffer == NULL) {
         fprintf(stderr, "Memory allocation failed.");
         if (ifp != stdin)
@@ -315,6 +334,9 @@ int main(int argc, char const *argv[]) {
         hca_file_free(&hca);
         return 1;
     }
+
+    if (!ignore_rva && hca.info.volume.available)
+        config.volume *= hca.info.volume.value;
 
     Writer writer;
     if (!writer_init(&writer, &config)) {
@@ -326,7 +348,7 @@ int main(int argc, char const *argv[]) {
     }
 
     size_t s;
-    while ((error = hca_file_read(buffer, &s, false, &hca)) == kHcaSuccess && writer_write(&writer, buffer, s)) ;
+    while ((error = hca_file_read(&hca, buffer, &s)) == kHcaSuccess && writer_write(&writer, buffer, s)) ;
     if (error && error != kHcaEndOfFile)
         fprintf(stderr, "Hca Decode Error: %s\n", hca_get_error_message(error));
 

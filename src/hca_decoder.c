@@ -208,8 +208,10 @@ HcaError hca_decoder_init(HcaDecoder *decoder, HcaFileInfo *hca, uint64_t key) {
 
     if ((decoder->block_buffer = (uint8_t*)malloc(hca->block_size + 2)) == NULL)
         return kHcaMemoryAllocationFailed;
-    if ((decoder->wave_buffer = (double*)malloc(hca->num_channels * 1152 * sizeof(double))) == NULL)
+    if ((decoder->wave_buffer = (double*)malloc(hca->num_channels * 1152 * sizeof(double))) == NULL) {
+        free(decoder->block_buffer);
         return kHcaMemoryAllocationFailed;
+    }
     memcpy(decoder->wave_buffer + 1024 * hca->num_channels, zeros, sizeof(double) * 128 * hca->num_channels);
 
     return kHcaSuccess;
@@ -237,6 +239,8 @@ HcaError hca_decoder_decode_block(HcaDecoder *decoder, FILE *fp) {
     if (*(uint16_t*)decoder->block_buffer != 0xffff)
         return kHcaInvalidBlockSignature;
 
+    memcpy(decoder->wave_buffer, decoder->wave_buffer + decoder->num_channels * 1024, sizeof(double) * decoder->num_channels * 128);
+
     // A block whose data are all zero means silence
     if (hca_decoder_zeroblock(decoder))
         return kHcaSuccess;
@@ -263,7 +267,6 @@ static inline bool hca_decoder_zeroblock(HcaDecoder *decoder) {
     for (; i < size; i++)
         if (block[i] != 0)
             return false;
-    memcpy(decoder->wave_buffer, decoder->wave_buffer + decoder->num_channels * 1024, sizeof(double) * decoder->num_channels * 128);
     memcpy(decoder->wave_buffer + decoder->num_channels * 128, zeros, sizeof(double) * decoder->num_channels * 1024);
     return true;
 }
@@ -463,7 +466,6 @@ void hca_decoder_decode_step5(HcaDecoder *decoder) {
 
     double t[256];
     int nc = decoder->num_channels;
-    memcpy(decoder->wave_buffer, decoder->wave_buffer + 1024 * decoder->num_channels, sizeof(double) * 128 * nc);
     for (int c = 0; c < nc; c++) {
         for (int n = 0; n < 8; n++) {
             double *block = decoder->channels[c].block[n];

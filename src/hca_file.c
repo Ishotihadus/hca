@@ -194,13 +194,16 @@ HcaError hca_file_init(HcaFile *file, FILE *fp, uint64_t key) {
     HcaError error;
     file->fp = fp;
     file->current_index = 0;
-    file->loop_started = false;
     if ((error = hca_file_info_init(&file->info, fp)))
         return error;
-    if (file->info.num_blocks * 1024 < file->info.num_ignored_samples_first + file->info.num_ignored_samples_last)
+    if (file->info.num_blocks * 1024 < file->info.num_ignored_samples_first + file->info.num_ignored_samples_last) {
+        hca_file_info_free(&file->info);
         return kHcaInvalidCompressionParameter;
-    if ((error = hca_decoder_init(&file->decoder, &file->info, key)))
+    }
+    if ((error = hca_decoder_init(&file->decoder, &file->info, key))) {
+        hca_file_info_free(&file->info);
         return error;
+    }
     return kHcaSuccess;
 }
 
@@ -208,43 +211,26 @@ size_t hca_file_calc_buffer_size(HcaFile *file) {
     return sizeof(double) * 1024 * file->info.num_channels;
 }
 
-HcaError hca_file_read(double *buffer, size_t *num_samples, bool loop, HcaFile *file) {
+HcaError hca_file_read(HcaFile *file, double *buffer, size_t *num_samples) {
     *num_samples = 0;
     if (file->current_index >= file->info.num_blocks - file->info.num_ignored_samples_last / 1024)
         return kHcaEndOfFile;
-    if (file->info.loop.available && file->current_index == file->info.loop.start)
-        file->loop_start_file_pos = ftell(file->fp);
     HcaError error = hca_decoder_decode_block(&file->decoder, file->fp);
-    if (error) {
-        ++file->current_index;
+    ++file->current_index;
+    if (error)
         return error == kHcaEndOfFile ? kHcaFileSizeNotSufficient : error;
-    }
-    if ((file->current_index + 1) * 1024 <= file->info.num_ignored_samples_first) {
-        ++file->current_index;
-        return hca_file_read(buffer, num_samples, loop, file);
-    }
     double *wave_ptr = file->decoder.wave_buffer;
     int length = 1024;
-    if (file->info.loop.available && file->current_index == file->info.loop.start && file->loop_started) {
-        wave_ptr += file->info.loop.num_ignored_samples_first * file->info.num_channels;
-        length -= file->info.loop.num_ignored_samples_first;
-    } else if (file->current_index * 1024 < file->info.num_ignored_samples_first) {
-        int skip = file->info.num_ignored_samples_first - file->current_index * 1024;
+    int skip = file->info.num_ignored_samples_first - (file->current_index - 1) * 1024;
+    if (skip >= 1024) {
+        return hca_file_read(file, buffer, num_samples);
+    } else if (skip > 0) {
         wave_ptr += skip * file->info.num_channels;
         length -= skip;
     }
-    if (file->info.loop.available && loop && file->current_index == file->info.loop.end) {
-        length -= file->info.loop.num_ignored_samples_last;
-        file->current_index = file->info.loop.start;
-        file->loop_started = true;
-        fseek(file->fp, file->loop_start_file_pos, SEEK_SET);
-    } else {
-        ++file->current_index;
-        if (file->current_index * 1024 + file->info.num_ignored_samples_last > file->info.num_blocks * 1024)
-            length -= file->current_index * 1024 + file->info.num_ignored_samples_last - file->info.num_blocks * 1024;
-    }
-    if (length < 0)
-        return kHcaInternalError;
+    int trim = file->current_index * 1024 - (file->info.num_blocks * 1024 - file->info.num_ignored_samples_last);
+    if (trim > 0)
+        length -= trim;
     *num_samples = length;
     memcpy(buffer, wave_ptr, sizeof(double) * length * file->info.num_channels);
     return kHcaSuccess;

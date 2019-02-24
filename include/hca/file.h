@@ -56,8 +56,6 @@ typedef struct HcaFile {
     HcaFileInfo info;
     HcaDecoder decoder;
     size_t current_index;
-    long loop_start_file_pos;
-    bool loop_started;
 } HcaFile;
 
 HcaError hca_file_info_init(HcaFileInfo *info, FILE *fp);
@@ -69,5 +67,5 @@ void hca_file_info_free(HcaFileInfo *info);
 
 HcaError hca_file_init(HcaFile *file, FILE *fp, uint64_t key);
 size_t hca_file_calc_buffer_size(HcaFile *file);
-HcaError hca_file_read(double *buffer, size_t *written_size, bool loop, HcaFile *file);
+HcaError hca_file_read(HcaFile *file, double *buffer, size_t *written_size);
 void hca_file_free(HcaFile *file);
