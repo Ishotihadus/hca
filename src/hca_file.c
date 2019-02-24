@@ -179,7 +179,7 @@ int hca_file_info_get_num_samples(HcaFileInfo *info) {
 }
 
 bool hca_file_info_get_loop(HcaFileInfo *info, int *start, int *end) {
-    if (info->loop.available)
+    if (!info->loop.available)
         return false;
     *start = info->loop.start * 1024 + info->loop.num_ignored_samples_first;
     *end = (info->loop.end + 1) * 1024 - info->loop.num_ignored_samples_last;
