@@ -326,7 +326,7 @@ int main(int argc, char const *argv[]) {
     }
 
     size_t s;
-    while ((error = hca_file_read(buffer, &s, true, &hca)) == kHcaSuccess && writer_write(&writer, buffer, s)) ;
+    while ((error = hca_file_read(buffer, &s, false, &hca)) == kHcaSuccess && writer_write(&writer, buffer, s)) ;
     if (error && error != kHcaEndOfFile)
         fprintf(stderr, "Hca Decode Error: %s\n", hca_get_error_message(error));
 
