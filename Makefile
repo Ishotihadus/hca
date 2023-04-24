@@ -13,7 +13,7 @@ DEPENDENCIES_LDFLAGS := $(shell pkg-config --libs sndfile)
 
 CFLAGS += -std=c11 -O2 -Wall -Wextra
 CXXFLAGS += -std=c++11 -O2 -Wall -Wextra
-CPPFLAGS += -Iinclude $(SNDFILE_CFLAGS)
+CPPFLAGS += -Iinclude $(DEPENDENCIES_CFLAGS)
 LDFLAGS += -Llib -lm $(DEPENDENCIES_LDFLAGS)
 
 COBJS := $(patsubst $(SRCDIR)/%.c,$(OBJDIR)/%.o,$(wildcard $(SRCDIR)/*.c))
